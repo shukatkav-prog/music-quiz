@@ -86,11 +86,22 @@
   .back .top { color: rgba(255,255,255,.75); }
   .back .num { color: #fff; }
   .ans { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 0; }
-  .ans .k { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .7; margin-top: 8px; }
+  .ans .k { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
   .ans .artist { font-family: Unbounded, sans-serif; font-weight: 800; font-size: clamp(18px, 6vw, 24px); line-height: 1.1; letter-spacing: -.01em; }
   .ans .title { font-family: Unbounded, sans-serif; font-weight: 500; font-size: clamp(15px, 4.8vw, 19px); line-height: 1.15; }
   .ans .era { font-weight: 800; font-size: 15px; }
+  .pt { position: relative; padding: 3px 36px 4px 9px; margin: 0 -9px; border-radius: 12px; cursor: pointer; transition: background .2s; }
+  .pt .k { margin-top: 2px; }
+  .pt.on { background: rgba(255,255,255,.16); }
+  .chk { position: absolute; right: 8px; top: 50%; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55);
+         display: grid; place-items: center; transition: background .2s, border-color .2s, transform .2s; }
+  .pt.on .chk { background: #fff; border-color: #fff; transform: scale(1.1); }
+  .pt.on .chk::after { content: ""; width: 9px; height: 5px; border: solid var(--c); border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); }
+  .gain { font-weight: 800; letter-spacing: .02em; text-transform: none; opacity: .75; font-size: 11px; }
+  .gain.has { opacity: 1; background: #fff; color: var(--c); padding: 3px 9px; border-radius: 99px; }
   .ans .qa { margin-top: 12px; padding: 11px 12px; border-radius: 12px; background: rgba(0,0,0,.2); }
+  .ans .pt.qa { margin: 10px 0 0; padding-right: 40px; }
+  .ans .pt.qa.on { background: rgba(255,255,255,.22); }
   .ans .qa .q { font-size: 12.5px; font-weight: 600; opacity: .85; }
   .ans .qa .a { font-size: 16px; font-weight: 800; margin-top: 4px; line-height: 1.25; }
   .full { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
@@ -149,8 +160,7 @@
 <header>
   <div class="logo">Пісні <span>для Ксю</span></div>
   <div class="score">
-    <div class="pill y" id="sy" title="вгадали">✓ <b>0</b></div>
-    <div class="pill n" id="sn" title="не вгадали">✗ <b>0</b></div>
+    <div class="pill y" id="sp" title="бали">★ <b>0</b></div>
     <div class="pill l" id="sl" title="залишилось">0</div>
   </div>
 </header>
@@ -177,15 +187,18 @@ const COLORS = { f70: '#d9622b', f80: '#d6337f', f90: '#7b4fd6', f2000: '#2f7fd8
                  u7080: '#b5462f', u90: '#c2861a', u2000: '#2d62b8', u2010: '#7a49b5', u2020: '#1b8a6b', u0: '#5d6b7a' };
 const T = {
   ua: { artist: 'Хто виконавець?', title: 'Як називається пісня?', block: 'Яка епоха?', opts: '70–80-ті / 90-ті / 2000-ні / 2010-ті / 2020-ті', tap: 'двічі торкнись картки, щоб перевернути', play: 'слухати відрізок',
-        kArtist: 'Виконавець', kTitle: 'Пісня', kBlock: 'Епоха', full: 'Вся пісня', pause: 'Пауза', lang: 'UA' },
+        kArtist: 'Виконавець', kTitle: 'Пісня', kBlock: 'Епоха', mark: 'відміть, що вгадали', full: 'Вся пісня', pause: 'Пауза', lang: 'UA' },
   en: { artist: 'Who is the artist?', title: "What's the song title?", block: 'Which era?', opts: '70s / 80s / 90s / 2000s / 2010s / 2020s', tap: 'double-tap the card to flip', play: 'play the clip',
-        kArtist: 'Artist', kTitle: 'Song', kBlock: 'Era', full: 'Full song', pause: 'Pause', lang: 'EN' },
+        kArtist: 'Artist', kTitle: 'Song', kBlock: 'Era', mark: 'tap what you got right', full: 'Full song', pause: 'Pause', lang: 'EN' },
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const PLAY = '<svg class="p" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="s" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
 
-let all = [], deck = [], pos = 0, yes = 0, no = 0;
+let all = [], deck = [], pos = 0, score = 0;
+// 1 point each for artist, title, era and the lyric question
+const MAX = 4;
+const pts = (n, ua = true) => ua ? (n % 10 === 1 && n % 100 !== 11 ? 'бал' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'бали' : 'балів') : (n === 1 ? 'pt' : 'pts');
 let player, ready = false, mode = null, playingId = null, unlockTimer = null;
 
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -211,12 +224,12 @@ function cardEl(c, n) {
         <div class="foot">${t.tap}</div>
       </div>
       <div class="face back">
-        <div class="top"><span class="num">№ ${String(n).padStart(2, '0')}</span><span>${t.lang}</span></div>
+        <div class="top"><span class="num">№ ${String(n).padStart(2, '0')}</span><span class="gain">${t.mark}</span><span>${t.lang}</span></div>
         <div class="ans">
-          <div class="k">${t.kArtist}</div><div class="artist">${esc(c.artist)}</div>
-          <div class="k">${t.kTitle}</div><div class="title">${esc(c.title)}</div>
-          <div class="k">${t.kBlock}</div><div class="era">${esc(c.block)}${c.year ? ' · ' + c.year : ''}</div>
-          <div class="qa"><div class="q">${esc(c.q)}</div><div class="a">${esc(c.a)}</div></div>
+          <div class="pt"><div class="k">${t.kArtist}</div><div class="artist">${esc(c.artist)}</div><span class="chk"></span></div>
+          <div class="pt"><div class="k">${t.kTitle}</div><div class="title">${esc(c.title)}</div><span class="chk"></span></div>
+          <div class="pt"><div class="k">${t.kBlock}</div><div class="era">${esc(c.block)}${c.year ? ' · ' + c.year : ''}</div><span class="chk"></span></div>
+          <div class="pt qa"><div class="q">${esc(c.q)}</div><div class="a">${esc(c.a)}</div><span class="chk"></span></div>
         </div>
         <div class="full"><button class="fullbtn"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><span>${t.full}</span></button><div class="seek"><div class="bar"><i></i><b></b></div><div class="tm"><span class="cur">0:00</span><span class="dur"></span></div></div></div>
       </div>
@@ -225,6 +238,12 @@ function cardEl(c, n) {
   el.querySelector('.play').addEventListener('click', e => { e.stopPropagation(); toggleClip(c, el); });
   el.querySelector('.fullbtn').addEventListener('click', e => { e.stopPropagation(); toggleFull(c, el); });
   bindSeek(c, el);
+  el.querySelectorAll('.pt').forEach(r => r.addEventListener('click', e => {
+    e.stopPropagation(); r.classList.toggle('on');
+    const n = el.querySelectorAll('.pt.on').length, g = el.querySelector('.gain');
+    g.textContent = n ? `+${n} ${pts(n, c.ua)}` : t.mark; g.classList.toggle('has', n > 0);
+    navigator.vibrate?.(8);
+  }));
   bindSwipe(el);
   return el;
 }
@@ -232,7 +251,7 @@ function cardEl(c, n) {
 function layout() {
   const els = [...$('deck').children];
   els.forEach((el, i) => { const d = els.length - 1 - i; el.dataset.depth = Math.min(d, 3); el.style.zIndex = 10 - d; if (d > 0) el.style.transform = ''; });
-  $('sy').querySelector('b').textContent = yes; $('sn').querySelector('b').textContent = no; $('sl').textContent = `${deck.length - pos} / ${deck.length}`;
+  $('sp').querySelector('b').textContent = score; $('sl').textContent = `${deck.length - pos} / ${deck.length}`;
   const top = topCard();
   if (top && ready) { const c = deck[pos]; player.cueVideoById({ videoId: c.v, startSeconds: c.start }); playingId = null; mode = null; }
 }
@@ -250,7 +269,7 @@ function fill() {
 }
 
 function start() {
-  deck = shuffle([...all]); pos = 0; yes = 0; no = 0; $('deck').innerHTML = ''; $('end').classList.remove('on'); fill();
+  deck = shuffle([...all]); pos = 0; score = 0; $('deck').innerHTML = ''; $('end').classList.remove('on'); fill();
 }
 
 /* ---------- swipe ---------- */
@@ -258,7 +277,7 @@ let lastTap = 0;
 function bindSwipe(el) {
   let x0, y0, dx = 0, moved = false, id = null;
   el.addEventListener('pointerdown', e => {
-    if (el !== topCard() || e.target.closest('button, .seek')) return;
+    if (el !== topCard() || e.target.closest('button, .seek, .pt')) return;
     id = e.pointerId; x0 = e.clientX; y0 = e.clientY; dx = 0; moved = false; el.setPointerCapture(id); el.classList.add('dragging');
   });
   el.addEventListener('pointermove', e => {
@@ -288,12 +307,15 @@ function flip() { const el = topCard(); if (el) el.classList.toggle('flipped'); 
 function decide(ok) {
   const el = topCard(); if (!el || el._gone) return; el._gone = true;
   stop();
+  // right/✓ counts the ticked rows (all 4 if none were ticked), left/✗ gives nothing
+  const c = deck[pos], ticked = el.querySelectorAll('.pt.on').length, got = ok ? (ticked || MAX) : 0;
+  if (ok && got < MAX) el.querySelector('.stamp.y').textContent = `+${got}`;
   el.querySelector(ok ? '.stamp.y' : '.stamp.n').style.opacity = 1;
   el.style.transform = `translate(${ok ? 140 : -140}vw, -4vh) rotate(${ok ? 28 : -28}deg)`;
   el.style.opacity = 0;
-  ok ? yes++ : no++;
-  const pill = $(ok ? 'sy' : 'sn'); pill.classList.add('bump'); setTimeout(() => pill.classList.remove('bump'), 250);
-  if (ok) confetti(); else { $('deck').classList.add('shake'); setTimeout(() => $('deck').classList.remove('shake'), 400); }
+  score += got;
+  const pill = $('sp'); pill.classList.add('bump'); setTimeout(() => pill.classList.remove('bump'), 250);
+  if (got === MAX) confetti(); else { $('deck').classList.add('shake'); setTimeout(() => $('deck').classList.remove('shake'), 400); }
   navigator.vibrate?.(ok ? 15 : [10, 40, 10]);
   pos++;
   setTimeout(() => { el.remove(); fill(); }, 320);
@@ -312,9 +334,10 @@ function confetti() {
 
 function finish() {
   stop();
-  $('endScore').textContent = `${yes} / ${deck.length}`;
-  const pct = yes / Math.max(1, deck.length);
-  $('endText').textContent = pct > .8 ? 'Музична енциклопедія 🎧' : pct > .5 ? 'Дуже непогано!' : pct > .25 ? 'Є куди рости 😉' : 'Ну, головне — пісні гарні';
+  const max = deck.length * MAX;
+  $('endScore').textContent = `${score} / ${max}`;
+  const pct = score / Math.max(1, max);
+  $('endText').textContent = pts(score) + ' · ' + (pct > .8 ? 'Музична енциклопедія 🎧' : pct > .5 ? 'Дуже непогано!' : pct > .25 ? 'Є куди рости 😉' : 'Ну, головне — пісні гарні');
   $('end').classList.add('on');
 }
 
